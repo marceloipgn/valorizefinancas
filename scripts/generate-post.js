@@ -12,27 +12,25 @@ async function gerarArtigo() {
     process.exit(1);
   }
 
-  // 1. Buscar Notícias (Termos expandidos)
+  // 1. Buscar Notícias
   console.log("Buscando notícia na NewsAPI...");
   let newsUrl = `https://newsapi.org/v2/everything?q=financas OR economia OR investimentos OR mercado&language=pt&sortBy=publishedAt&pageSize=5&apiKey=${NEWS_API_KEY}`;
   
   let responseNews = await fetch(newsUrl);
   let dataNews = await responseNews.json();
 
-  // Fallback: se não achar com os termos específicos, busca manchetes do Brasil
   if (dataNews.status !== 'ok' || !dataNews.articles || dataNews.articles.length === 0) {
-    console.log("Nenhum resultado na busca primária. Tentando manchetes gerais do Brasil...");
+    console.log("Nenhum resultado na busca primária. Tentando manchetes do Brasil...");
     newsUrl = `https://newsapi.org/v2/top-headlines?country=br&category=business&apiKey=${NEWS_API_KEY}`;
     responseNews = await fetch(newsUrl);
     dataNews = await responseNews.json();
   }
 
   if (dataNews.status !== 'ok' || !dataNews.articles || dataNews.articles.length === 0) {
-    console.error("Erro na NewsAPI (nenhuma notícia encontrada nem no fallback):", JSON.stringify(dataNews));
+    console.error("Erro na NewsAPI:", JSON.stringify(dataNews));
     process.exit(1);
   }
 
-  // Pega a primeira notícia válida
   const noticia = dataNews.articles.find(a => a.title && a.title !== '[Removed]') || dataNews.articles[0];
   console.log(`Notícia encontrada: "${noticia.title}"`);
 
@@ -54,9 +52,9 @@ async function gerarArtigo() {
     }
   `;
 
-  // 3. Chamada à API do Gemini
+  // 3. Chamada à API do Gemini (Atualizado para gemini-2.5-flash)
   console.log("Enviando solicitação ao Gemini...");
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
   
   const responseGemini = await fetch(geminiUrl, {
     method: 'POST',
