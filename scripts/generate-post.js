@@ -12,36 +12,45 @@ async function gerarArtigo() {
     process.exit(1);
   }
 
-  // 1. Buscar Notícias
+  // 1. Buscar Notícias (Termos expandidos)
   console.log("Buscando notícia na NewsAPI...");
-  const newsUrl = `https://newsapi.org/v2/everything?q=financas&language=pt&sortBy=publishedAt&pageSize=1&apiKey=${NEWS_API_KEY}`;
+  let newsUrl = `https://newsapi.org/v2/everything?q=financas OR economia OR investimentos OR mercado&language=pt&sortBy=publishedAt&pageSize=5&apiKey=${NEWS_API_KEY}`;
   
-  const responseNews = await fetch(newsUrl);
-  const dataNews = await responseNews.json();
+  let responseNews = await fetch(newsUrl);
+  let dataNews = await responseNews.json();
+
+  // Fallback: se não achar com os termos específicos, busca manchetes do Brasil
+  if (dataNews.status !== 'ok' || !dataNews.articles || dataNews.articles.length === 0) {
+    console.log("Nenhum resultado na busca primária. Tentando manchetes gerais do Brasil...");
+    newsUrl = `https://newsapi.org/v2/top-headlines?country=br&category=business&apiKey=${NEWS_API_KEY}`;
+    responseNews = await fetch(newsUrl);
+    dataNews = await responseNews.json();
+  }
 
   if (dataNews.status !== 'ok' || !dataNews.articles || dataNews.articles.length === 0) {
-    console.error("Erro na NewsAPI:", JSON.stringify(dataNews));
+    console.error("Erro na NewsAPI (nenhuma notícia encontrada nem no fallback):", JSON.stringify(dataNews));
     process.exit(1);
   }
 
-  const noticia = dataNews.articles[0];
+  // Pega a primeira notícia válida
+  const noticia = dataNews.articles.find(a => a.title && a.title !== '[Removed]') || dataNews.articles[0];
   console.log(`Notícia encontrada: "${noticia.title}"`);
 
-  // 2. Prompt do Gemini (Corrigido sem crases internas)
+  // 2. Prompt do Gemini
   const prompt = `
-    Atue como redator do portal 'Valorize Finanças'.
-    Escreva um artigo em Português (Brasil) baseado nesta notícia:
+    Atue como redator especialista do portal 'Valorize Finanças'.
+    Escreva um artigo educativo e prático em Português (Brasil) baseado nesta notícia ou tema:
     Título: ${noticia.title}
-    Resumo: ${noticia.description || ''}
+    Resumo: ${noticia.description || 'Notícia sobre mercado financeiro e economia.'}
 
     Responda APENAS com um objeto JSON válido, sem nenhum texto antes ou depois e sem blocos de código Markdown:
     {
       "id": "${Date.now()}",
-      "title": "Título chamativo",
-      "slug": "titulo-chamativo",
+      "title": "Título chamativo e amigável",
+      "slug": "titulo-chamativo-e-amigavel",
       "date": "${new Date().toISOString().split('T')[0]}",
-      "summary": "Resumo de duas frases",
-      "content": "Conteúdo completo com parágrafos"
+      "summary": "Resumo atraente em duas frases sobre o tema",
+      "content": "Conteúdo completo com parágrafos bem explicados sobre educação financeira"
     }
   `;
 
@@ -93,10 +102,10 @@ async function gerarArtigo() {
   listaPosts.unshift(novoPost);
   fs.writeFileSync(caminhoPosts, JSON.stringify(listaPosts, null, 2));
 
-  console.log("Sucesso! Artigo salvo em src/data/posts.json");
+  console.log("Sucesso! Artigo gerado e salvo em src/data/posts.json");
 }
 
 gerarArtigo().catch((err) => {
   console.error("Erro fatal:", err);
   process.exit(1);
-}); 
+});
