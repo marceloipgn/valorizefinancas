@@ -2,21 +2,21 @@ name: Gerar Artigo Automático
 
 on:
   schedule:
-    # Executa todos os dias às 09:00 UTC (06:00 horário de Brasília)
+    # Executa todos os dias às 09:00 UTC (06:00 BRT)
     - cron: '0 9 * * *'
-  workflow_dispatch: # Permite testar e disparar manualmente quando quiser
+  workflow_dispatch: # Permite disparar manualmente pelo botão
 
 jobs:
   generate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout do Código
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Configurar Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
 
       - name: Executar Gerador de Artigos
         env:
