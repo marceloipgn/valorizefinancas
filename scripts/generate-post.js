@@ -5,67 +5,75 @@ const NEWS_API_KEY = process.env.NEWS_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 async function gerarArtigo() {
+  console.log("Iniciando geração de artigo...");
+
   if (!NEWS_API_KEY || !GEMINI_API_KEY) {
-    throw new Error("As chaves NEWS_API_KEY ou GEMINI_API_KEY não foram encontradas nos Secrets.");
+    console.error("ERRO: Verifique se as secrets NEWS_API_KEY e GEMINI_API_KEY foram cadastradas em Settings > Secrets.");
+    process.exit(1);
   }
 
-  // 1. Busca notícia na NewsAPI
-  const responseNews = await fetch(
-    `https://newsapi.org/v2/everything?q=financas OR economia OR investimentos&language=pt&sortBy=publishedAt&pageSize=1&apiKey=${NEWS_API_KEY}`
-  );
+  // 1. Buscar Notícias
+  console.log("Buscando notícia na NewsAPI...");
+  const newsUrl = `https://newsapi.org/v2/everything?q=financas&language=pt&sortBy=publishedAt&pageSize=1&apiKey=${NEWS_API_KEY}`;
+  
+  const responseNews = await fetch(newsUrl);
   const dataNews = await responseNews.json();
 
   if (dataNews.status !== 'ok' || !dataNews.articles || dataNews.articles.length === 0) {
-    console.log("Nenhuma notícia encontrada na NewsAPI hoje.");
-    return;
+    console.error("Erro na NewsAPI:", JSON.stringify(dataNews));
+    process.exit(1);
   }
 
   const noticia = dataNews.articles[0];
+  console.log(`Notícia encontrada: "${noticia.title}"`);
 
-  // 2. Prepara o prompt para o Gemini
+  // 2. Prompt do Gemini (Corrigido sem crases internas)
   const prompt = `
-    Você é um redator do portal 'Valorize Finanças'.
-    Com base na notícia abaixo, crie um artigo educativo em Português (Brasil).
-    
-    Título original: ${noticia.title}
-    Resumo: ${noticia.description}
+    Atue como redator do portal 'Valorize Finanças'.
+    Escreva um artigo em Português (Brasil) baseado nesta notícia:
+    Título: ${noticia.title}
+    Resumo: ${noticia.description || ''}
 
-    Retorne APENAS um JSON válido no seguinte formato exato (sem formatação markdown ```json):
+    Responda APENAS com um objeto JSON válido, sem nenhum texto antes ou depois e sem blocos de código Markdown:
     {
       "id": "${Date.now()}",
-      "title": "Título atraente em PT-BR",
-      "slug": "titulo-atraente-slug",
+      "title": "Título chamativo",
+      "slug": "titulo-chamativo",
       "date": "${new Date().toISOString().split('T')[0]}",
-      "summary": "Resumo de duas frases do artigo",
-      "content": "Conteúdo completo com parágrafos separados por \\n\\n"
+      "summary": "Resumo de duas frases",
+      "content": "Conteúdo completo com parágrafos"
     }
   `;
 
-  // 3. Chama a API do Gemini
-  const responseGemini = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-    }
-  );
+  // 3. Chamada à API do Gemini
+  console.log("Enviando solicitação ao Gemini...");
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  
+  const responseGemini = await fetch(geminiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+  });
 
   const dataGemini = await responseGemini.json();
-  
+
   if (!dataGemini.candidates || !dataGemini.candidates[0]) {
-    console.error("Resposta do Gemini:", JSON.stringify(dataGemini));
-    throw new Error("Resposta inválida da API do Gemini.");
+    console.error("Erro na resposta do Gemini:", JSON.stringify(dataGemini));
+    process.exit(1);
   }
 
   const rawText = dataGemini.candidates[0].content.parts[0].text;
   
-  // Extrai o JSON
+  // Extrair JSON
   const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error("Erro ao extrair JSON do Gemini.");
+  if (!jsonMatch) {
+    console.error("Não foi possível identificar o JSON no texto retornado pelo Gemini:", rawText);
+    process.exit(1);
+  }
+
   const novoPost = JSON.parse(jsonMatch[0]);
 
-  // 4. Salva no arquivo src/data/posts.json
+  // 4. Gravar o arquivo src/data/posts.json
   const pastaData = path.resolve('src/data');
   if (!fs.existsSync(pastaData)) {
     fs.mkdirSync(pastaData, { recursive: true });
@@ -73,7 +81,7 @@ async function gerarArtigo() {
 
   const caminhoPosts = path.join(pastaData, 'posts.json');
   let listaPosts = [];
-  
+
   if (fs.existsSync(caminhoPosts)) {
     try {
       listaPosts = JSON.parse(fs.readFileSync(caminhoPosts, 'utf-8'));
@@ -82,15 +90,13 @@ async function gerarArtigo() {
     }
   }
 
-  // Adiciona o novo post no topo
   listaPosts.unshift(novoPost);
-
-  // Grava o arquivo atualizado
   fs.writeFileSync(caminhoPosts, JSON.stringify(listaPosts, null, 2));
-  console.log("Novo artigo gerado e salvo em src/data/posts.json!");
+
+  console.log("Sucesso! Artigo salvo em src/data/posts.json");
 }
 
 gerarArtigo().catch((err) => {
-  console.error("Erro na execução:", err);
+  console.error("Erro fatal:", err);
   process.exit(1);
-});
+}); 
