@@ -1,4 +1,4 @@
-const fs = require('fs');
+ const fs = require('fs');
 const path = require('path');
 
 const NEWS_API_KEY = process.env.NEWS_API_KEY;
@@ -12,15 +12,15 @@ async function gerarArtigo() {
     process.exit(1);
   }
 
-  // 1. Buscar Notícias
+  // 1. Buscar Notícias de Finanças e Economia
   console.log("Buscando notícia na NewsAPI...");
-  let newsUrl = `https://newsapi.org/v2/everything?q=financas OR economia OR investimentos OR mercado&language=pt&sortBy=publishedAt&pageSize=5&apiKey=${NEWS_API_KEY}`;
+  let newsUrl = `https://newsapi.org/v2/everything?q=investimentos OR "educação financeira" OR selic OR "mercado financeiro"&language=pt&sortBy=publishedAt&pageSize=5&apiKey=${NEWS_API_KEY}`;
   
   let responseNews = await fetch(newsUrl);
   let dataNews = await responseNews.json();
 
   if (dataNews.status !== 'ok' || !dataNews.articles || dataNews.articles.length === 0) {
-    console.log("Nenhum resultado na busca primária. Tentando manchetes do Brasil...");
+    console.log("Nenhum resultado na busca primária. Tentando manchetes de negócios...");
     newsUrl = `https://newsapi.org/v2/top-headlines?country=br&category=business&apiKey=${NEWS_API_KEY}`;
     responseNews = await fetch(newsUrl);
     dataNews = await responseNews.json();
@@ -34,27 +34,28 @@ async function gerarArtigo() {
   const noticia = dataNews.articles.find(a => a.title && a.title !== '[Removed]') || dataNews.articles[0];
   console.log(`Notícia encontrada: "${noticia.title}"`);
 
-  // 2. Prompt do Gemini
+  // 2. Prompt focado estritamente em Finanças Práticas
   const prompt = `
     Atue como redator especialista do portal 'Valorize Finanças'.
-    Escreva um artigo educativo e prático em Português (Brasil) baseado nesta notícia ou tema:
-    Título: ${noticia.title}
-    Resumo: ${noticia.description || 'Notícia sobre mercado financeiro e economia.'}
+    Escreva um artigo prático e focado em educação financeira e impacto no bolso do leitor em Português (Brasil).
+    
+    Notícia de referência: ${noticia.title}
+    Resumo original: ${noticia.description || 'Assunto sobre mercado financeiro e economia.'}
 
-    Responda APENAS com um objeto JSON válido, sem nenhum texto antes ou depois e sem blocos de código Markdown:
+    Responda APENAS com um objeto JSON válido, sem texto antes/depois e sem blocos Markdown:
     {
       "id": "${Date.now()}",
-      "title": "Título chamativo e amigável",
-      "slug": "titulo-chamativo-e-amigavel",
+      "title": "Título chamativo sobre finanças pessoais",
+      "slug": "titulo-chamativo-sobre-financas",
       "date": "${new Date().toISOString().split('T')[0]}",
-      "summary": "Resumo atraente em duas frases sobre o tema",
-      "content": "Conteúdo completo com parágrafos bem explicados sobre educação financeira"
+      "summary": "Resumo explicativo em duas frases sobre como o tema afeta as finanças do leitor",
+      "content": "Artigo completo com dicas práticas de planejamento financeiro e investimentos, dividido em parágrafos simples"
     }
   `;
 
-  // 3. Chamada à API do Gemini (Atualizado para gemini-2.5-flash)
+  // 3. Chamada à API do Gemini usando a versão mais recente (gemini-2.0-flash)
   console.log("Enviando solicitação ao Gemini...");
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
   
   const responseGemini = await fetch(geminiUrl, {
     method: 'POST',
