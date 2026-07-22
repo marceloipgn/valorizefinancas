@@ -7,46 +7,42 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 // Função para aguardar alguns segundos
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function chamarGeminiComRetry(prompt, tentativas = 3) {
-  // Lista de modelos suportados na versão atual da API
-  const modelos = ['gemini-2.5-flash', 'gemini-flash', 'gemini-2.0-flash'];
+async function chamarGeminiComRetry(prompt, tentativas = 4) {
+  const modelo = 'gemini-2.0-flash';
 
-  for (let modelo of modelos) {
-    for (let i = 0; i < tentativas; i++) {
-      console.log(`Tentando Gemini com modelo ${modelo} (tentativa ${i + 1})...`);
-      
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
-      
-      try {
-        const response = await fetch(geminiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
+  for (let i = 0; i < tentativas; i++) {
+    console.log(`Enviando requisição ao Gemini (${modelo}) - Tentativa ${i + 1}...`);
+    
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
+    
+    try {
+      const response = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      });
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (response.ok && data.candidates && data.candidates[0]) {
-          return data;
-        }
-
-        // Se for erro de cota (429), aguarda antes de tentar novamente
-        if (data.error && data.error.code === 429) {
-          console.warn(`Limite de cota atingido no modelo ${modelo} (429). Aguardando 45 segundos...`);
-          await sleep(45000);
-        } else {
-          console.warn(`Aviso no modelo ${modelo}:`, data.error ? data.error.message : data);
-          break; // Passa para o próximo modelo se for outro tipo de erro (ex: 404)
-        }
-      } catch (err) {
-        console.warn(`Falha de conexão com ${modelo}:`, err.message);
+      if (response.ok && data.candidates && data.candidates[0]) {
+        return data;
       }
+
+      if (data.error && data.error.code === 429) {
+        console.warn(`Limite de cota atingido (429). Aguardando 60 segundos antes da tentativa ${i + 2}...`);
+        await sleep(60000); // Aguarda 1 minuto inteiro para renovar o Rate Limit por minuto da API
+      } else {
+        console.error("Erro da API Gemini:", JSON.stringify(data));
+        throw new Error(data.error ? data.error.message : "Erro desconhecido no Gemini");
+      }
+    } catch (err) {
+      if (err.message.includes("429")) continue;
+      throw err;
     }
   }
 
-  throw new Error("Não foi possível obter resposta de nenhum modelo do Gemini devido a limites de cota ou instabilidade. Tente novamente em alguns minutos.");
+  throw new Error("Cota de requisições temporariamente excedida no Google AI Studio. Tente novamente mais tarde.");
 }
-
 async function gerarArtigo() {
   console.log("Iniciando geração de artigo...");
 
