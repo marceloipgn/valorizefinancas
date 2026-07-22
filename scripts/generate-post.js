@@ -8,8 +8,8 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function chamarGeminiComRetry(prompt, tentativas = 3) {
-  // Lista de modelos para tentar (com fallback)
-  const modelos = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  // Lista de modelos suportados na versão atual da API
+  const modelos = ['gemini-2.5-flash', 'gemini-flash', 'gemini-2.0-flash'];
 
   for (let modelo of modelos) {
     for (let i = 0; i < tentativas; i++) {
@@ -17,30 +17,34 @@ async function chamarGeminiComRetry(prompt, tentativas = 3) {
       
       const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
       
-      const response = await fetch(geminiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-      });
+      try {
+        const response = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
 
-      const data = await response.json();
+        const data = await response.json();
 
-      if (response.ok && data.candidates && data.candidates[0]) {
-        return data;
-      }
+        if (response.ok && data.candidates && data.candidates[0]) {
+          return data;
+        }
 
-      // Se for erro de cota (429), espera antes de tentar de novo
-      if (data.error && data.error.code === 429) {
-        console.warn(`Limite de cota atingido (429). Aguardando 35 segundos para tentar novamente...`);
-        await sleep(35000);
-      } else {
-        console.warn(`Erro no modelo ${modelo}:`, data.error ? data.error.message : data);
-        break; // Tenta o próximo modelo
+        // Se for erro de cota (429), aguarda antes de tentar novamente
+        if (data.error && data.error.code === 429) {
+          console.warn(`Limite de cota atingido no modelo ${modelo} (429). Aguardando 45 segundos...`);
+          await sleep(45000);
+        } else {
+          console.warn(`Aviso no modelo ${modelo}:`, data.error ? data.error.message : data);
+          break; // Passa para o próximo modelo se for outro tipo de erro (ex: 404)
+        }
+      } catch (err) {
+        console.warn(`Falha de conexão com ${modelo}:`, err.message);
       }
     }
   }
 
-  throw new Error("Não foi possível obter resposta do Gemini após várias tentativas/modelos.");
+  throw new Error("Não foi possível obter resposta de nenhum modelo do Gemini devido a limites de cota ou instabilidade. Tente novamente em alguns minutos.");
 }
 
 async function gerarArtigo() {
