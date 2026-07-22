@@ -1,8 +1,47 @@
- const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 const NEWS_API_KEY = process.env.NEWS_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+
+// Função para aguardar alguns segundos
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function chamarGeminiComRetry(prompt, tentativas = 3) {
+  // Lista de modelos para tentar (com fallback)
+  const modelos = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+
+  for (let modelo of modelos) {
+    for (let i = 0; i < tentativas; i++) {
+      console.log(`Tentando Gemini com modelo ${modelo} (tentativa ${i + 1})...`);
+      
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent?key=${GEMINI_API_KEY}`;
+      
+      const response = await fetch(geminiUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.candidates && data.candidates[0]) {
+        return data;
+      }
+
+      // Se for erro de cota (429), espera antes de tentar de novo
+      if (data.error && data.error.code === 429) {
+        console.warn(`Limite de cota atingido (429). Aguardando 35 segundos para tentar novamente...`);
+        await sleep(35000);
+      } else {
+        console.warn(`Erro no modelo ${modelo}:`, data.error ? data.error.message : data);
+        break; // Tenta o próximo modelo
+      }
+    }
+  }
+
+  throw new Error("Não foi possível obter resposta do Gemini após várias tentativas/modelos.");
+}
 
 async function gerarArtigo() {
   console.log("Iniciando geração de artigo...");
@@ -34,7 +73,7 @@ async function gerarArtigo() {
   const noticia = dataNews.articles.find(a => a.title && a.title !== '[Removed]') || dataNews.articles[0];
   console.log(`Notícia encontrada: "${noticia.title}"`);
 
-  // 2. Prompt focado estritamente em Finanças Práticas
+  // 2. Prompt focado em Finanças
   const prompt = `
     Atue como redator especialista do portal 'Valorize Finanças'.
     Escreva um artigo prático e focado em educação financeira e impacto no bolso do leitor em Português (Brasil).
@@ -53,22 +92,8 @@ async function gerarArtigo() {
     }
   `;
 
-  // 3. Chamada à API do Gemini usando a versão mais recente (gemini-2.0-flash)
-  console.log("Enviando solicitação ao Gemini...");
-  const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
-  
-  const responseGemini = await fetch(geminiUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-  });
-
-  const dataGemini = await responseGemini.json();
-
-  if (!dataGemini.candidates || !dataGemini.candidates[0]) {
-    console.error("Erro na resposta do Gemini:", JSON.stringify(dataGemini));
-    process.exit(1);
-  }
+  // 3. Chamada ao Gemini com resiliência
+  const dataGemini = await chamarGeminiComRetry(prompt);
 
   const rawText = dataGemini.candidates[0].content.parts[0].text;
   
