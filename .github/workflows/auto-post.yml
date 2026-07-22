@@ -2,9 +2,11 @@ name: Gerar Artigo Automático
 
 on:
   schedule:
-    # Executa todos os dias às 09:00 UTC (06:00 BRT)
     - cron: '0 9 * * *'
-  workflow_dispatch: # Permite disparar manualmente pelo botão
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   generate:
